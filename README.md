@@ -1,7 +1,4 @@
 - 👋 Hi, I’m mohammad namakshenas
-- 👀 I’m interested in everything!
-- 🌱 I’m currently learning full-stack!
-- 💞️ I’m looking to collaborate on Data-driven projects!
 - 📫 How to reach me: https://www.linkedin.com/in/mohammad-namakshenas/
 
 <!---
