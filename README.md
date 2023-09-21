@@ -1,7 +1,5 @@
 ### Hello there 👋
 
-- I’m Mohammad Namakshenas
-
 #### A System Designer/Debugger/Maintainer by day ☼ and a Digital Nomad by night ☾
 
 Researcher at [LCL University of Luxembourg](https://uni.lu);<br>
