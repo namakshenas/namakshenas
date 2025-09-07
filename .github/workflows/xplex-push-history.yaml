@@ -19,11 +19,29 @@ jobs:
       
       - name: Generate push history data
         run: |
-          # Get push events from GitHub API
-          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/namakshenas/xplex/events?per_page=100" | \
-            jq -r '.[] | select(.type == "PushEvent") | .created_at | sub("T.*"; "") | sub("-[0-9]{2}$"; "")' | \
+          # Get push events from GitHub API with better error handling
+          response=$(curl -s -w "\n%{http_code}" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/namakshenas/xplex/events?per_page=100")
+          
+          http_code=$(echo "$response" | tail -n1)
+          json_data=$(echo "$response" | sed '$d')
+          
+          if [ "$http_code" != "200" ]; then
+            echo "API request failed with HTTP $http_code"
+            echo "Response: $json_data"
+            # Fallback to empty data
+            echo '' > monthly_pushes.txt
+          else
+            # Process JSON data with proper error handling
+            echo "$json_data" | jq -r '
+              if type == "array" then
+                .[] | select(type == "object" and has("type")) | select(.type == "PushEvent") | .created_at
+              else
+                empty
+              end' | \
+            awk -F'T' '{print $1}' | awk -F'-' '{print $1"-"$2}' | \
             sort | uniq -c | awk '{print $2 " " $1}' > monthly_pushes.txt
+          fi
           
           # Check if we have data
           if [ ! -s monthly_pushes.txt ]; then
@@ -43,6 +61,9 @@ jobs:
             
             # Format x-axis labels correctly
             x_labels=$(awk '{printf "\"%s\", ", $1}' monthly_pushes.txt | sed 's/, $//')
+            if [ -z "$x_labels" ]; then
+              x_labels='"No Data"'
+            fi
             echo "    x-axis [$x_labels]" >> chart.md
             
             # Format y-axis with proper range
@@ -52,6 +73,9 @@ jobs:
             
             # Format bar data correctly
             bar_data=$(awk '{printf "%s, ", $2}' monthly_pushes.txt | sed 's/, $//')
+            if [ -z "$bar_data" ]; then
+              bar_data='0'
+            fi
             echo "    bar [$bar_data]" >> chart.md
             echo '```' >> chart.md
           fi
