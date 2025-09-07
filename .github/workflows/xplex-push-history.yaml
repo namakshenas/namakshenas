@@ -19,73 +19,83 @@ jobs:
     - name: Generate xplex push timeline
       run: |
         # Fetch entire commit history from xplex repository
-        echo "Fetching xplex commit history..."
+        echo "Fetching complete xplex commit history..."
         
-        # Get all commits and aggregate by month
+        # Initialize variables
         page=1
+        total_commits=0
         > all_commits.txt
         
+        # Fetch ALL pages of commits
         while true; do
           echo "Fetching page $page..."
           
-          response=$(curl -s -w "\n%{http_code}" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          # Make API request with proper authentication
+          response=$(curl -s -w "\n%{http_code}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository_owner }}/xplex/commits?per_page=100&page=$page")
           
-          # Extract HTTP status code
+          # Split response and status code
           http_code=$(echo "$response" | tail -n 1)
           content=$(echo "$response" | head -n -1)
           
           # Check HTTP status
           if [ "$http_code" != "200" ]; then
-            echo "API request failed with status code: $http_code"
+            echo "HTTP Error: $http_code"
             if [ "$http_code" = "404" ]; then
-              echo "Repository not found or not accessible"
-            elif [ "$http_code" = "401" ]; then
-              echo "Authentication failed"
+              echo "ERROR: Repository '${{ github.repository_owner }}/xplex' not found!"
+              exit 1
             fi
-            echo "Response: $content"
             break
           fi
           
-          # Check if response is empty array or invalid
-          if [ "$content" = "[]" ] || [ -z "$content" ]; then
-            echo "No more commits found"
+          # Check if we have commits
+          if [ "$content" = "[]" ]; then
+            echo "No more commits on page $page"
             break
           fi
           
-          # Validate JSON structure before parsing
-          if echo "$content" | jq empty 2>/dev/null; then
-            # Extract dates and append to file
-            echo "$content" | jq -r '.[]? | .commit.author.date // empty' >> all_commits.txt
-            
-            # Check if we got less than 100 results (last page)
-            count=$(echo "$content" | jq '. | length')
-            if [ "$count" -lt 100 ]; then
-              echo "Reached last page (found $count commits)"
-              break
-            fi
-          else
-            echo "Invalid JSON response"
+          # Count commits on this page
+          page_count=$(echo "$content" | jq '. | length')
+          echo "Found $page_count commits on page $page"
+          
+          # Extract ALL commit dates from this page
+          echo "$content" | jq -r '.[] | .commit.author.date' >> all_commits.txt
+          
+          total_commits=$((total_commits + page_count))
+          
+          # If we got less than 100, it's the last page
+          if [ "$page_count" -lt 100 ]; then
+            echo "Reached last page"
             break
           fi
           
+          # Move to next page
           page=$((page + 1))
           
-          # Safety limit to prevent infinite loops
-          if [ "$page" -gt 100 ]; then
-            echo "Reached maximum page limit"
+          # Safety limit (but high enough for large repos)
+          if [ "$page" -gt 500 ]; then
+            echo "WARNING: Reached page limit of 500"
             break
           fi
         done
         
-        # Check if we got any commits
-        if [ ! -s all_commits.txt ]; then
-          echo "No commits found. Creating empty chart..."
-          > monthly_data.txt
+        echo "Total commits fetched: $total_commits"
+        
+        # Process commits into monthly data
+        if [ -s all_commits.txt ]; then
+          echo "Processing commits into monthly aggregates..."
+          
+          # Extract YYYY-MM from dates and count occurrences
+          cat all_commits.txt | cut -d'T' -f1 | cut -d'-' -f1,2 | sort | uniq -c | awk '{print $2 " " $1}' | sort > monthly_data.txt
+          
+          echo "Months with activity: $(wc -l < monthly_data.txt)"
+          echo "Sample of monthly data:"
+          head -5 monthly_data.txt
         else
-          # Aggregate by month (YYYY-MM format)
-          echo "Processing $(wc -l < all_commits.txt) commits..."
-          cat all_commits.txt | cut -d'T' -f1 | cut -d'-' -f1,2 | sort | uniq -c | awk '{print $2 " " $1}' > monthly_data.txt
+          echo "ERROR: No commits found!"
+          > monthly_data.txt
         fi
         
         # Generate Mermaid xychart
@@ -94,62 +104,127 @@ jobs:
         # Start building the chart
         echo "" > chart.md
         echo "<!-- XPLEX-PUSH-HISTORY-START -->" >> chart.md
-        echo "## 📊 Xplex Push History (Monthly)" >> chart.md
-        echo "" >> chart.md
-        echo '```mermaid' >> chart.md
-        echo "%%{init: {'theme': 'dark', 'themeVariables': { 'xyChart': {'width': 900, 'height': 400}}}}%%" >> chart.md
-        echo 'xychart-beta' >> chart.md
-        echo '    title "Xplex Repository Monthly Push Activity"' >> chart.md
-        echo -n '    x-axis [' >> chart.md
-        
-        # Add months to x-axis
-        if [ -s monthly_data.txt ]; then
-          # Get all months and format them
-          months=$(cat monthly_data.txt | cut -d' ' -f1 | sed 's/^/"/' | sed 's/$/"/' | tr '\n' ',' | sed 's/,$//')
-          echo "$months]" >> chart.md
-          
-          # Calculate max value for y-axis
-          max_count=$(cat monthly_data.txt | cut -d' ' -f2 | sort -n | tail -1)
-          # Round up to nearest 10
-          y_max=$(( (max_count / 10 + 1) * 10 ))
-        else
-          # Default to current month if no data
-          current_month=$(date '+%Y-%m')
-          echo "\"$current_month\"]" >> chart.md
-          y_max=10
-        fi
-        
-        echo "    y-axis \"Number of Pushes\" 0 --> $y_max" >> chart.md
-        echo -n '    bar [' >> chart.md
-        
-        # Add push counts
-        if [ -s monthly_data.txt ]; then
-          counts=$(cat monthly_data.txt | cut -d' ' -f2 | tr '\n' ',' | sed 's/,$//')
-          echo "$counts]" >> chart.md
-        else
-          # Default to zero if no data
-          echo "0]" >> chart.md
-        fi
-        
-        echo '```' >> chart.md
+        echo "## 📊 Xplex Push History (Complete Monthly Timeline)" >> chart.md
         echo "" >> chart.md
         
-        # Add summary statistics
         if [ -s monthly_data.txt ]; then
-          total_commits=$(awk '{sum+=$2} END {print sum}' monthly_data.txt)
-          total_months=$(wc -l < monthly_data.txt)
-          avg_per_month=$(awk '{sum+=$2} END {printf "%.1f", sum/NR}' monthly_data.txt)
+          # Get first and last month for complete range
           first_month=$(head -1 monthly_data.txt | cut -d' ' -f1)
           last_month=$(tail -1 monthly_data.txt | cut -d' ' -f1)
           
-          echo "### 📈 Statistics" >> chart.md
+          echo "Creating chart from $first_month to $last_month"
+          
+          # Create complete month range (fill gaps with zeros)
+          start_year=$(echo $first_month | cut -d'-' -f1)
+          start_month=$(echo $first_month | cut -d'-' -f2)
+          end_year=$(echo $last_month | cut -d'-' -f1)
+          end_month=$(echo $last_month | cut -d'-' -f2)
+          
+          # Generate all months in range
+          > all_months.txt
+          > final_data.txt
+          
+          current_year=$start_year
+          current_month=$start_month
+          
+          while true; do
+            # Format month with leading zero
+            formatted_month=$(printf "%04d-%02d" $current_year $current_month)
+            echo "$formatted_month" >> all_months.txt
+            
+            # Get count for this month (or 0 if no commits)
+            count=$(grep "^$formatted_month " monthly_data.txt | cut -d' ' -f2)
+            if [ -z "$count" ]; then
+              count=0
+            fi
+            echo "$formatted_month $count" >> final_data.txt
+            
+            # Check if we've reached the end
+            if [ "$current_year" -eq "$end_year" ] && [ "$current_month" -eq "$end_month" ]; then
+              break
+            fi
+            
+            # Move to next month
+            current_month=$((current_month + 1))
+            if [ "$current_month" -gt 12 ]; then
+              current_month=1
+              current_year=$((current_year + 1))
+            fi
+          done
+          
+          # Build the chart with complete data
+          echo '```mermaid' >> chart.md
+          echo "%%{init: {'theme': 'dark', 'themeVariables': { 'xyChart': {'width': 900, 'height': 400}}}}%%" >> chart.md
+          echo 'xychart-beta' >> chart.md
+          echo '    title "Xplex Repository - Complete Monthly Push Activity"' >> chart.md
+          
+          # X-axis with all months
+          echo -n '    x-axis [' >> chart.md
+          months=$(cat final_data.txt | cut -d' ' -f1 | sed 's/^/"/' | sed 's/$/"/' | tr '\n' ',' | sed 's/,$//')
+          echo "$months]" >> chart.md
+          
+          # Calculate appropriate Y-axis max
+          max_count=$(cat final_data.txt | cut -d' ' -f2 | sort -n | tail -1)
+          if [ "$max_count" -le 10 ]; then
+            y_max=10
+          elif [ "$max_count" -le 50 ]; then
+            y_max=50
+          elif [ "$max_count" -le 100 ]; then
+            y_max=100
+          else
+            y_max=$(( (max_count / 100 + 1) * 100 ))
+          fi
+          
+          echo "    y-axis \"Number of Pushes\" 0 --> $y_max" >> chart.md
+          
+          # Bar data with all counts
+          echo -n '    bar [' >> chart.md
+          counts=$(cat final_data.txt | cut -d' ' -f2 | tr '\n' ',' | sed 's/,$//')
+          echo "$counts]" >> chart.md
+          
+          echo '```' >> chart.md
+          echo "" >> chart.md
+          
+          # Calculate statistics
+          total_commits=$(cat all_commits.txt | wc -l)
+          active_months=$(grep -v " 0$" final_data.txt | wc -l)
+          total_months=$(cat final_data.txt | wc -l)
+          
+          if [ "$active_months" -gt 0 ]; then
+            avg_per_active_month=$(awk '$2>0 {sum+=$2; count++} END {printf "%.1f", sum/count}' final_data.txt)
+          else
+            avg_per_active_month="0"
+          fi
+          
+          echo "### 📈 Repository Statistics" >> chart.md
           echo "- **Total Commits**: $total_commits" >> chart.md
-          echo "- **Active Months**: $total_months" >> chart.md
-          echo "- **Average per Month**: $avg_per_month" >> chart.md
-          echo "- **Period**: $first_month to $last_month" >> chart.md
+          echo "- **Active Months**: $active_months / $total_months" >> chart.md
+          echo "- **Average per Active Month**: $avg_per_active_month" >> chart.md
+          echo "- **Timeline**: $first_month to $last_month" >> chart.md
+          
+          # Find most active month
+          most_active=$(sort -k2 -n -r final_data.txt | head -1)
+          most_active_month=$(echo $most_active | cut -d' ' -f1)
+          most_active_count=$(echo $most_active | cut -d' ' -f2)
+          if [ "$most_active_count" -gt 0 ]; then
+            echo "- **Most Active Month**: $most_active_month ($most_active_count commits)" >> chart.md
+          fi
+          
+          # Clean up temp files
+          rm -f all_months.txt final_data.txt
         else
-          echo "### 📈 Statistics" >> chart.md
-          echo "- No commit data available yet" >> chart.md
+          # No data case
+          echo '```mermaid' >> chart.md
+          echo "%%{init: {'theme': 'dark', 'themeVariables': { 'xyChart': {'width': 900, 'height': 400}}}}%%" >> chart.md
+          echo 'xychart-beta' >> chart.md
+          echo '    title "Xplex Repository - No Data Available"' >> chart.md
+          echo '    x-axis ["No Data"]' >> chart.md
+          echo '    y-axis "Number of Pushes" 0 --> 10' >> chart.md
+          echo '    bar [0]' >> chart.md
+          echo '```' >> chart.md
+          echo "" >> chart.md
+          echo "### 📈 Repository Statistics" >> chart.md
+          echo "- No commit data available" >> chart.md
         fi
         
         echo "" >> chart.md
