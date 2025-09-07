@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Get full commit history:cite[1]
+          fetch-depth: 0  # Get full commit history
       
       - name: Generate push history data
         run: |
@@ -25,35 +25,54 @@ jobs:
             jq -r '.[] | select(.type == "PushEvent") | .created_at | sub("T.*"; "") | sub("-[0-9]{2}$"; "")' | \
             sort | uniq -c | awk '{print $2 " " $1}' > monthly_pushes.txt
           
-          # Generate mermaid xychart with proper formatting
-          echo '```mermaid' > chart.md
-          echo 'xychart-beta' >> chart.md
-          echo '    title "xplex Monthly Push History"' >> chart.md
-          
-          # Format x-axis labels correctly
-          x_labels=$(awk '{printf "\"%s\", ", $1}' monthly_pushes.txt | sed 's/, $//')
-          echo "    x-axis [$x_labels]" >> chart.md
-          
-          # Format y-axis with proper range
-          max_value=$(awk '{print $2}' monthly_pushes.txt | sort -nr | head -n1)
-          y_max=$((max_value + 1))
-          echo "    y-axis \"Number of Pushes\" 0 --> $y_max" >> chart.md
-          
-          # Format bar data correctly
-          bar_data=$(awk '{printf "%s, ", $2}' monthly_pushes.txt | sed 's/, $//')
-          echo "    bar [$bar_data]" >> chart.md
-          echo '```' >> chart.md
+          # Check if we have data
+          if [ ! -s monthly_pushes.txt ]; then
+            echo "No push events found. Using default message."
+            echo '```mermaid' > chart.md
+            echo 'xychart-beta' >> chart.md
+            echo '    title "xplex Monthly Push History"' >> chart.md
+            echo '    x-axis ["No Data"]' >> chart.md
+            echo '    y-axis "Number of Pushes" 0 --> 5' >> chart.md
+            echo '    bar [0]' >> chart.md
+            echo '```' >> chart.md
+          else
+            # Generate mermaid xychart with proper formatting
+            echo '```mermaid' > chart.md
+            echo 'xychart-beta' >> chart.md
+            echo '    title "xplex Monthly Push History"' >> chart.md
+            
+            # Format x-axis labels correctly
+            x_labels=$(awk '{printf "\"%s\", ", $1}' monthly_pushes.txt | sed 's/, $//')
+            echo "    x-axis [$x_labels]" >> chart.md
+            
+            # Format y-axis with proper range
+            max_value=$(awk '{print $2}' monthly_pushes.txt | sort -nr | head -n1)
+            y_max=$((max_value + 1))
+            echo "    y-axis \"Number of Pushes\" 0 --> $y_max" >> chart.md
+            
+            # Format bar data correctly
+            bar_data=$(awk '{printf "%s, ", $2}' monthly_pushes.txt | sed 's/, $//')
+            echo "    bar [$bar_data]" >> chart.md
+            echo '```' >> chart.md
+          fi
       
       - name: Update README with new chart
         run: |
-          # Create temporary marker pattern for replacement
-          sed -i '/<!-- XPLEX-PUSH-HISTORY-START -->/,/<!-- XPLEX-PUSH-HISTORY-END -->/{
-            /<!-- XPLEX-PUSH-HISTORY-START -->/{
-              n
-              r chart.md
-            }
-            /<!-- XPLEX-PUSH-HISTORY-END -->/!d
-          }' README.md
+          # Create temporary file with start marker and chart
+          echo '<!-- XPLEX-PUSH-HISTORY-START -->' > temp.md
+          cat chart.md >> temp.md
+          echo '<!-- XPLEX-PUSH-HISTORY-END -->' >> temp.md
+          
+          # Extract content before and after the markers
+          sed -n '1,/<!-- XPLEX-PUSH-HISTORY-START -->/p' README.md | head -n -1 > before.md
+          sed -n '/<!-- XPLEX-PUSH-HISTORY-END -->/,$p' README.md | tail -n +2 > after.md
+          
+          # Combine all parts
+          cat before.md temp.md after.md > README_new.md
+          mv README_new.md README.md
+          
+          # Clean up
+          rm -f temp.md before.md after.md chart.md monthly_pushes.txt
       
       - name: Commit and push changes
         run: |
