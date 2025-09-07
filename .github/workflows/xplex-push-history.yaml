@@ -31,46 +31,45 @@ jobs:
         echo "Generating Mermaid chart..."
         
         # Start building the chart
-        cat > chart.md << 'EOF'
-
-<!-- XPLEX-PUSH-HISTORY-START -->
-## 📊 Xplex Push History (Last 30 Days)
-
-```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': { 'xyChart': {'width': 900, 'height': 400}}}}%%
-xychart-beta
-    title "Xplex Repository Push Activity"
-    x-axis [
-EOF
+        echo "" > chart.md
+        echo "<!-- XPLEX-PUSH-HISTORY-START -->" >> chart.md
+        echo "## 📊 Xplex Push History (Last 30 Days)" >> chart.md
+        echo "" >> chart.md
+        echo '```mermaid' >> chart.md
+        echo "%%{init: {'theme': 'dark', 'themeVariables': { 'xyChart': {'width': 900, 'height': 400}}}}%%" >> chart.md
+        echo 'xychart-beta' >> chart.md
+        echo '    title "Xplex Repository Push Activity"' >> chart.md
+        echo -n '    x-axis [' >> chart.md
         
         # Add dates to x-axis
         if [ -s push_data.txt ]; then
           dates=$(cat push_data.txt | cut -d' ' -f1 | sed 's/^/"/' | sed 's/$/"/' | tr '\n' ',' | sed 's/,$//')
-          echo "        $dates" >> chart.md
+          echo "$dates]" >> chart.md
         else
           # Default to last 7 days if no data
+          dates=""
           for i in {6..0}; do
-            date -d "$i days ago" '+"%Y-%m-%d"' >> dates.txt
+            if [ "$i" -eq 0 ]; then
+              dates="${dates}\"$(date -d "$i days ago" '+%Y-%m-%d')\""
+            else
+              dates="${dates}\"$(date -d "$i days ago" '+%Y-%m-%d')\", "
+            fi
           done
-          dates=$(cat dates.txt | tr '\n' ',' | sed 's/,$//')
-          echo "        $dates" >> chart.md
-          rm -f dates.txt
+          echo "$dates]" >> chart.md
         fi
         
-        echo '    ]' >> chart.md
         echo '    y-axis "Number of Pushes" 0 --> 10' >> chart.md
-        echo '    bar [' >> chart.md
+        echo -n '    bar [' >> chart.md
         
         # Add push counts
         if [ -s push_data.txt ]; then
           counts=$(cat push_data.txt | cut -d' ' -f2 | tr '\n' ',' | sed 's/,$//')
-          echo "        $counts" >> chart.md
+          echo "$counts]" >> chart.md
         else
           # Default to zeros if no data
-          echo "        0, 0, 0, 0, 0, 0, 0" >> chart.md
+          echo "0, 0, 0, 0, 0, 0, 0]" >> chart.md
         fi
         
-        echo '    ]' >> chart.md
         echo '```' >> chart.md
         echo "" >> chart.md
         echo "*Last updated: $(date '+%Y-%m-%d %H:%M UTC')*" >> chart.md
