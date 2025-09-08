@@ -40,9 +40,12 @@ jobs:
         echo 'config:' >> chart.md
         echo '    xyChart:' >> chart.md
         echo '        showDataLabel: true' >> chart.md
+        echo '    themeVariables:' >> chart.md
+        echo '        xyChart:' >> chart.md
+        echo '            titleColor: "#ff0000"' >> chart.md
         echo '---' >> chart.md
         echo 'xychart' >> chart.md
-        echo '  title "xplex history!"' >> chart.md
+        echo '  title "xplex timeline"' >> chart.md
         echo -n '  x-axis [' >> chart.md
         awk '{printf "\"%s\", ", $2}' commits.txt | sed 's/, $//' >> chart.md
         echo ']' >> chart.md
