@@ -27,8 +27,8 @@ jobs:
       run: |
         cd xplex
         
-        # Get monthly commit counts (last 12 months)
-        git log --format="%Y-%m" | sort | uniq -c | sort -k2 | tail -12 > ../commits.txt
+        # Get ALL monthly commit counts from complete history
+        git log --format="%Y-%m" | sort | uniq -c | sort -k2 > ../commits.txt
         
         cd ..
         
@@ -36,7 +36,6 @@ jobs:
         echo '<!-- XPLEX-PUSH-HISTORY-START -->' > chart.md
         echo '' >> chart.md
         echo '```mermaid' >> chart.md
-        echo '%%{init: {"theme":"dark"}}%%' >> chart.md
         echo 'xychart-beta' >> chart.md
         echo '  title "xplex Monthly Commits"' >> chart.md
         echo -n '  x-axis [' >> chart.md
