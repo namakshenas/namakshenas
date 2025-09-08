@@ -27,26 +27,37 @@ jobs:
       run: |
         cd xplex
         
-        # Get monthly commit counts
-        data=$(git log --format="%Y-%m" | sort | uniq -c | sort -k2 | tail -12 | awk '{print "[\""$2"\", "$1"]"}' | tr '\n' ',' | sed 's/,$//')
+        # Get monthly commit counts (last 12 months)
+        git log --format="%Y-%m" | sort | uniq -c | sort -k2 | tail -12 > ../commits.txt
         
-        # Generate Mermaid chart
-        chart="---
-        config:
-          themeVariables:
-            xyChart:
-              backgroundColor: \"transparent\"
-        ---
-        %%{init: {'theme':'dark'}}%%
-        xychart-beta
-          title \"xplex Monthly Commits\"
-          x-axis [$(echo "$data" | sed 's/\["\([^"]*\)",[^]]*\]/\1/g' | tr ',' ' ')]
-          y-axis \"Commits\"
-          bar [$(echo "$data" | sed 's/\["[^"]*", \([0-9]*\)\]/\1/g' | tr ',' ' ')]"
-        
-        # Update README
         cd ..
-        sed -i "/<!-- XPLEX-PUSH-HISTORY-START -->/,/<!-- XPLEX-PUSH-HISTORY-END -->/c\<!-- XPLEX-PUSH-HISTORY-START -->\n\n\`\`\`mermaid\n$chart\n\`\`\`\n\n<!-- XPLEX-PUSH-HISTORY-END -->" README.md
+        
+        # Build the chart
+        echo '<!-- XPLEX-PUSH-HISTORY-START -->' > chart.md
+        echo '' >> chart.md
+        echo '```mermaid' >> chart.md
+        echo '%%{init: {"theme":"dark"}}%%' >> chart.md
+        echo 'xychart-beta' >> chart.md
+        echo '  title "xplex Monthly Commits"' >> chart.md
+        echo -n '  x-axis [' >> chart.md
+        awk '{printf "\"%s\" ", $2}' commits.txt | sed 's/ $//' >> chart.md
+        echo ']' >> chart.md
+        echo '  y-axis "Commits"' >> chart.md
+        echo -n '  bar [' >> chart.md
+        awk '{printf "%s ", $1}' commits.txt | sed 's/ $//' >> chart.md
+        echo ']' >> chart.md
+        echo '```' >> chart.md
+        echo '' >> chart.md
+        echo '<!-- XPLEX-PUSH-HISTORY-END -->' >> chart.md
+        
+        # Replace section in README
+        awk '
+          /<!-- XPLEX-PUSH-HISTORY-START -->/ {f=1}
+          !f {print}
+          /<!-- XPLEX-PUSH-HISTORY-END -->/ {system("cat chart.md"); f=0}
+        ' README.md > README.tmp && mv README.tmp README.md
+        
+        rm commits.txt chart.md
         
     - name: Commit changes
       run: |
