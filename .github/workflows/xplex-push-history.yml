@@ -36,6 +36,11 @@ jobs:
         echo '<!-- XPLEX-PUSH-HISTORY-START -->' > chart.md
         echo '' >> chart.md
         echo '```mermaid' >> chart.md
+        echo '---' >> chart.md
+        echo 'config:' >> chart.md
+        echo '    xyChart:' >> chart.md
+        echo '        showDataLabel: true' >> chart.md
+        echo '---' >> chart.md
         echo 'xychart' >> chart.md
         echo '  title "xplex history!"' >> chart.md
         echo -n '  x-axis [' >> chart.md
