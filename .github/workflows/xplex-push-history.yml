@@ -39,11 +39,11 @@ jobs:
         echo 'xychart-beta' >> chart.md
         echo '  title "xplex Monthly Commits"' >> chart.md
         echo -n '  x-axis [' >> chart.md
-        awk '{printf "\"%s\" ", $2}' commits.txt | sed 's/ $//' >> chart.md
+        awk '{printf "\"%s\", ", $2}' commits.txt | sed 's/, $//' >> chart.md
         echo ']' >> chart.md
         echo '  y-axis "Commits"' >> chart.md
         echo -n '  bar [' >> chart.md
-        awk '{printf "%s ", $1}' commits.txt | sed 's/ $//' >> chart.md
+        awk '{printf "%s, ", $1}' commits.txt | sed 's/, $//' >> chart.md
         echo ']' >> chart.md
         echo '```' >> chart.md
         echo '' >> chart.md
