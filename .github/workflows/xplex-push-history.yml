@@ -28,7 +28,7 @@ jobs:
         cd xplex
         
         # Get ALL monthly commit counts from complete history
-        git log --format="%Y-%m" | sort | uniq -c | sort -k2 > ../commits.txt
+        git log --date=format:'%Y-%m' --pretty=format:'%ad' | sort | uniq -c | sort -k2 > ../commits.txt
         
         cd ..
         
